@@ -13,6 +13,7 @@ class TryOnDataset(torch.utils.data.Dataset):
         width=832,
         num_frames=49,          
         repeat=1,
+        load_from_cache=False
     ):
         super().__init__()
         self.dataset_root = dataset_root
@@ -23,7 +24,7 @@ class TryOnDataset(torch.utils.data.Dataset):
         self.num_frames = 1 if stage == "image" else num_frames
         self.height = height
         self.width = width
-
+        self.load_from_cache = load_from_cache
         self.image_op = (
             LoadImage() 
             >> ImageCropAndResize(height, width) 
@@ -111,7 +112,7 @@ class TryOnDataset(torch.utils.data.Dataset):
         try:
             # === 1. 加载 Reference Image (Cloth) ===
             # 无论什么阶段，衣服都是静态图，使用 image_op
-            ret["cloth"] = self.image_op(item["cloth_path"])[0] 
+            ret["cloth"] = self.image_op(item["cloth_path"])
 
             # === 2. 加载其余数据 (根据 Stage 切换 Operator) ===
             # 选择当前阶段对应的 Operator
@@ -119,7 +120,7 @@ class TryOnDataset(torch.utils.data.Dataset):
             ret["input"] = op(item["input_path"])
             ret["densepose"] = op(item["densepose_path"])
             ret["agnostic"] = op(item["agnostic_path"])
-            ret["maks"] = op(item["mask_path"])
+            ret["mask"] = op(item["mask_path"])
 
         except Exception as e:
             print(f"[Dataset Error] Loading {item['input_path']} failed: {e}")
