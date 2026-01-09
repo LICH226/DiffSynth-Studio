@@ -536,4 +536,27 @@ z_image_series = [
     },
 ]
 
-MODEL_CONFIGS = qwen_image_series + wan_series + flux_series + flux2_series + z_image_series
+# ==============================================================================
+# Wan VTON Series
+# ==============================================================================
+tryon_series = [
+    {
+        "model_hash": "5e242df366a92fff7c66d820b45afade",
+        "model_name": "wan_tryon_dit",
+        "model_class": "diffsynth.models.wan_tryon_dit.WanVTONDiT",
+        "extra_kwargs": {   
+            "patch_size": [1, 2, 2],
+            "in_dim": 100,                   
+            "dim": 3072,                 
+            "ffn_dim": 14336,             
+            "freq_dim": 256,
+            "text_dim": 4096,
+            "out_dim": 48,                  
+            "num_heads": 24,                
+            "num_layers": 30,          
+            "eps": 1e-06,
+        }
+    },
+]
+
+MODEL_CONFIGS = qwen_image_series + wan_series + flux_series + flux2_series + z_image_series + tryon_series
