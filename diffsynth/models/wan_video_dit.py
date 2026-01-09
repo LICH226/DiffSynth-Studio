@@ -341,7 +341,10 @@ class WanModel(torch.nn.Module):
             y_camera = self.control_adapter(control_camera_latents_input)
             x = [u + v for u, v in zip(x, y_camera)]
             x = x[0].unsqueeze(0)
-        return x
+        
+        f, h, w = x.shape[2], x.shape[3], x.shape[4]
+        x = x.flatten(2).transpose(1, 2)
+        return x, (f, h, w)
 
     def unpatchify(self, x: torch.Tensor, grid_size: torch.Tensor):
         return rearrange(
