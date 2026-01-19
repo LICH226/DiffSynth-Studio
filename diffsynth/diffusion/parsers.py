@@ -31,6 +31,7 @@ def add_model_config(parser: argparse.ArgumentParser):
     return parser
 
 def add_training_config(parser: argparse.ArgumentParser):
+    parser.add_argument("--batch_size", type=int, default=1, help="Batch size per GPU/TPU core/CPU core.")
     parser.add_argument("--learning_rate", type=float, default=1e-4, help="Learning rate.")
     parser.add_argument("--num_epochs", type=int, default=1, help="Number of epochs.")
     parser.add_argument("--trainable_models", type=str, default=None, help="Models to train, e.g., dit, vae, text_encoder.")

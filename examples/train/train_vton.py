@@ -3,6 +3,7 @@ from diffsynth.core import TryOnDataset
 from diffsynth.diffusion import *
 from diffsynth.pipelines.wan_tryon import WanVTONPipeline
 from diffsynth.core.loader.config import  ModelConfig
+from safetensors.torch import load_file
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 class WanVTONTrainingModule(DiffusionTrainingModule):
@@ -23,6 +24,11 @@ class WanVTONTrainingModule(DiffusionTrainingModule):
 
         self.args = args
         self.prepare_models_for_training()
+
+        if args.resume_from_checkpoint is not None and os.path.exists(args.resume_from_checkpoint):
+            print(f"\n>>> 🚀 Resuming from checkpoint: {args.resume_from_checkpoint}")
+            self.load_finetuned_weights(args.resume_from_checkpoint)
+
         self.max_timestep_boundary = 1.0
         self.min_timestep_boundary = 0.0
         self.use_gradient_checkpointing = True 
@@ -77,6 +83,45 @@ class WanVTONTrainingModule(DiffusionTrainingModule):
         print(f"   - Trainable Ratio:      {trainable_params / total_params * 100:.3f}%")
         print("="*40 + "\n")
 
+    def load_finetuned_weights(self, checkpoint_path):
+        print(f">>> Loading clean Stage 1 weights from {checkpoint_path} ...")
+        from safetensors.torch import load_file
+        
+        # 1. 读取原始文件
+        state_dict = load_file(checkpoint_path)
+        
+        # 2. 手动清洗与映射 (替代有 Bug 的父类方法)
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            # A. 清洗前缀 (去除 module. 和 pipe.dit.)
+            clean_k = k.replace("module.", "").replace("pipe.dit.", "")
+            
+            # B. 映射 LoRA 名字 (如果原本就是 default 则不变，如果不是则补上)
+            # 这一步是为了兼容不同版本的 DiffSynth 保存格式
+            if "lora_A.weight" in clean_k and "default" not in clean_k:
+                clean_k = clean_k.replace("lora_A.weight", "lora_A.default.weight")
+            elif "lora_B.weight" in clean_k and "default" not in clean_k:
+                clean_k = clean_k.replace("lora_B.weight", "lora_B.default.weight")
+            
+            # C. 🔥 关键：无论是不是 LoRA，都要保留！
+            new_state_dict[clean_k] = v
+            
+        # 3. 加载到模型
+        missing, unexpected = self.pipe.dit.load_state_dict(new_state_dict, strict=False)
+        
+        # 4. 验证 VTON 参数 (adapter_cloth)
+        vton_missing = [k for k in missing if "adapter_cloth" in k]
+        
+        if len(vton_missing) > 0:
+            print(f"❌ [Error] Stage 1 Load FAILED!")
+            print(f"   Missing VTON keys: {vton_missing[:3]}")
+            # 打印几个 new_state_dict 里的 key 看看是不是名字还有问题
+            print(f"   Available keys sample: {list(new_state_dict.keys())[:3]}")
+            raise RuntimeError("Critical: Failed to load Stage 1 VTON weights!")
+        else:
+            print(f"✅ [Success] Stage 1 Adapter & LoRA loaded successfully.")
+            print(f"    - Loaded keys count: {len(new_state_dict)}")
+
     def forward(self, data):
         inputs_posi = {"prompt": data["prompt"]} 
         inputs_nega = {"negative_prompt": ""}
@@ -113,7 +158,7 @@ def parse_args():
     parser = add_general_config(parser)
     parser = add_video_size_config(parser)
     parser.add_argument("--stage", type=str, default="image", choices=["image", "video"], help="Training stage")
-    parser.add_argument("--batch_size", type=int, default=2, help="Batch size per GPU")
+    parser.add_argument("--resume_from_checkpoint", type=str, default=None, help="Path to stage 1 checkpoint (LoRA + Unfrozen weights) to resume from.")
     return parser.parse_args()
 
 
@@ -144,7 +189,7 @@ if __name__ == "__main__":
     model = WanVTONTrainingModule(accelerator.device, pipeline_config={"stage": args.stage}, args=args)
     
     model_logger = ModelLogger(
-        output_path=os.path.join(args.output_path, args.stage), 
+        output_path=args.output_path, 
         remove_prefix_in_ckpt="pipe.dit.", 
     )
 
